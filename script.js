@@ -1,79 +1,107 @@
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
-let money = 100;
+const menu = document.getElementById("menu");
+const gameOverScreen = document.getElementById("gameOver");
+
+let gameRunning = false;
+
+let money = 200;
 let life = 10;
 let wave = 1;
+let score = 0;
+let kills = 0;
+let nextBoss = 20;
 
-const moneyEl = document.getElementById("money");
-const lifeEl = document.getElementById("life");
-const waveEl = document.getElementById("wave");
+let selectedTower = "normal";
 
-// Caminho
-const path = [
-    { x: 0, y: 250 },
-    { x: 200, y: 250 },
-    { x: 200, y: 100 },
-    { x: 500, y: 100 },
-    { x: 500, y: 400 },
-    { x: 900, y: 400 }
-];
+function selectTower(type) {
+    selectedTower = type;
+}
+
+function startGame() {
+    menu.style.display = "none";
+    gameOverScreen.style.display = "none";
+    gameRunning = true;
+}
+
+function restartGame() {
+    money = 200;
+    life = 10;
+    wave = 1;
+    score = 0;
+
+    enemies = [];
+    towers = [];
+    bullets = [];
+
+    spawnTimer = 0;
+
+    gameRunning = true;
+    gameOverScreen.style.display = "none";
+}
+
+// 🔊 SOM
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+function playSound(freq) {
+    let osc = audioCtx.createOscillator();
+    let gain = audioCtx.createGain();
+
+    osc.frequency.value = freq;
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    osc.start();
+    gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.2);
+}
+
+// ================= JOGO =================
 
 let enemies = [];
 let towers = [];
 let bullets = [];
-let explosions = [];
 
-let spawnCount = 0;
+const path = [
+    { x: 0, y: 250 }, { x: 200, y: 250 }, { x: 200, y: 100 },
+    { x: 500, y: 100 }, { x: 500, y: 400 }, { x: 900, y: 400 }
+];
 
-// Desenhar caminho
-function drawPath() {
-    ctx.strokeStyle = "#555";
-    ctx.lineWidth = 20;
-    ctx.beginPath();
-    ctx.moveTo(path[0].x, path[0].y);
+// TORRES
+canvas.addEventListener("click", (e) => {
+    if (!gameRunning) return;
 
-    for (let p of path) {
-        ctx.lineTo(p.x, p.y);
+    let x = e.offsetX;
+    let y = e.offsetY;
+
+    if (money >= 50) {
+        towers.push({ x, y, cooldown: 0 });
+        money -= 50;
     }
+});
 
-    ctx.stroke();
+// SPAWN NORMAL
+function spawnEnemy() {
+    enemies.push({ x: 0, y: 250, hp: 100 + wave * 10, pathIndex: 0, type: "normal" });
 }
 
-// Spawn inimigo
-function spawnEnemy() {
+// 😈 BOSS
+function spawnBoss() {
     enemies.push({
-        x: path[0].x,
-        y: path[0].y,
-        hp: 100 + wave * 20,
-        maxHp: 100 + wave * 20,
-        speed: 1 + wave * 0.2,
-        pathIndex: 0
+        x: 0,
+        y: 250,
+        hp: 500 + wave * 50,
+        pathIndex: 0,
+        type: "boss"
     });
 }
 
-// Waves
 let spawnTimer = 0;
 
-function handleWave() {
-    spawnTimer++;
-
-    if (spawnCount < wave * 5) {
-        if (spawnTimer > 60) { // controla velocidade (60 frames ≈ 1s)
-            spawnEnemy();
-            spawnCount++;
-            spawnTimer = 0;
-        }
-    } else if (enemies.length === 0) {
-        wave++;
-        spawnCount = 0;
-    }
-}
-// Movimento inimigos (corrigido splice)
 function updateEnemies() {
     for (let i = enemies.length - 1; i >= 0; i--) {
-        let enemy = enemies[i];
-        let target = path[enemy.pathIndex + 1];
+        let e = enemies[i];
+        let target = path[e.pathIndex + 1];
 
         if (!target) {
             life--;
@@ -81,188 +109,167 @@ function updateEnemies() {
             continue;
         }
 
-        let dx = target.x - enemy.x;
-        let dy = target.y - enemy.y;
+        let dx = target.x - e.x;
+        let dy = target.y - e.y;
         let dist = Math.sqrt(dx * dx + dy * dy);
 
-        if (dist < 2) {
-            enemy.pathIndex++;
-        } else {
-            enemy.x += (dx / dist) * enemy.speed;
-            enemy.y += (dy / dist) * enemy.speed;
+        let speed = e.type === "boss" ? 0.6 : 1;
+
+        if (dist < 2) e.pathIndex++;
+        else {
+            e.x += dx / dist * speed;
+            e.y += dy / dist * speed;
         }
     }
 }
 
-// Desenhar inimigos
-function drawEnemies() {
-    enemies.forEach(enemy => {
-        ctx.fillStyle = "red";
-        ctx.beginPath();
-        ctx.arc(enemy.x, enemy.y, 10, 0, Math.PI * 2);
-        ctx.fill();
-
-        // barra de vida
-        ctx.fillStyle = "green";
-        ctx.fillRect(enemy.x - 10, enemy.y - 18, 20 * (enemy.hp / enemy.maxHp), 3);
-    });
-}
-
-// Criar torre
-canvas.addEventListener("click", (e) => {
-    if (money >= 50) {
-        towers.push({
-            x: e.offsetX,
-            y: e.offsetY,
-            range: 120,
-            fireRate: 50,
-            cooldown: 0
-        });
-        money -= 50;
-    }
-});
-
-// Torres
 function updateTowers() {
-    towers.forEach(tower => {
-        tower.cooldown--;
+    towers.forEach(t => {
+        t.cooldown--;
 
-        if (tower.cooldown <= 0) {
-            let target = enemies.find(enemy => {
-                let dx = enemy.x - tower.x;
-                let dy = enemy.y - tower.y;
-                return Math.sqrt(dx * dx + dy * dy) < tower.range;
-            });
-
+        if (t.cooldown <= 0) {
+            let target = enemies[0];
             if (target) {
-                bullets.push({
-                    x: tower.x,
-                    y: tower.y,
-                    target: target,
-                    speed: 5
-                });
-                tower.cooldown = tower.fireRate;
+                bullets.push({ x: t.x, y: t.y, target });
+                playSound(600);
+                t.cooldown = 50;
             }
         }
     });
 }
 
-// 🔥 CORRIGIDO AQUI
 function updateBullets() {
     for (let i = bullets.length - 1; i >= 0; i--) {
-        let bullet = bullets[i];
+        let b = bullets[i];
 
-        // Se alvo morreu
-        if (!enemies.includes(bullet.target)) {
+        if (!enemies.includes(b.target)) {
             bullets.splice(i, 1);
             continue;
         }
 
-        let dx = bullet.target.x - bullet.x;
-        let dy = bullet.target.y - bullet.y;
+        let dx = b.target.x - b.x;
+        let dy = b.target.y - b.y;
         let dist = Math.sqrt(dx * dx + dy * dy);
 
-        if (dist === 0) continue;
+        b.x += dx / dist * 5;
+        b.y += dy / dist * 5;
 
-        bullet.x += (dx / dist) * bullet.speed;
-        bullet.y += (dy / dist) * bullet.speed;
-
-        // impacto
         if (dist < 8) {
-            bullet.target.hp -= 40;
-
-            explosions.push({ x: bullet.x, y: bullet.y, radius: 10 });
-
+            b.target.hp -= 40;
+            playSound(200);
             bullets.splice(i, 1);
+        }
+    }
 
-            if (bullet.target.hp <= 0) {
-                money += 20;
-                enemies = enemies.filter(e => e !== bullet.target);
+    enemies = enemies.filter(e => {
+        if (e.hp <= 0) {
+            money += 20;
+            if (e.type === "boss") {
+                score += 100;
+            } else {
+                score += 10;
+                kills++;
             }
+            return false;
         }
-    }
-}
-
-// Explosões
-function drawExplosions() {
-    for (let i = explosions.length - 1; i >= 0; i--) {
-        let exp = explosions[i];
-
-        ctx.fillStyle = "orange";
-        ctx.beginPath();
-        ctx.arc(exp.x, exp.y, exp.radius, 0, Math.PI * 2);
-        ctx.fill();
-
-        exp.radius += 1;
-
-        if (exp.radius > 15) {
-            explosions.splice(i, 1);
-        }
-    }
-}
-
-// Torres
-function drawTowers() {
-    towers.forEach(t => {
-        ctx.fillStyle = "blue";
-        ctx.fillRect(t.x - 10, t.y - 10, 20, 20);
-
-        ctx.strokeStyle = "rgba(0,0,255,0.2)";
-        ctx.beginPath();
-        ctx.arc(t.x, t.y, t.range, 0, Math.PI * 2);
-        ctx.stroke();
+        return true;
     });
 }
 
-// Tiros
-function drawBullets() {
-    ctx.fillStyle = "yellow";
+// DESENHO
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    enemies.forEach(e => {
+        ctx.fillStyle = e.type === "boss" ? "purple" : "red";
+        ctx.beginPath();
+        ctx.arc(e.x, e.y, e.type === "boss" ? 15 : 10, 0, Math.PI * 2);
+        ctx.fill();
+    });
+
+    towers.forEach(t => {
+        ctx.fillStyle = "blue";
+        ctx.fillRect(t.x - 10, t.y - 10, 20, 20);
+    });
+
     bullets.forEach(b => {
+        ctx.fillStyle = "yellow";
         ctx.beginPath();
         ctx.arc(b.x, b.y, 4, 0, Math.PI * 2);
         ctx.fill();
     });
 }
 
-// UI
 function updateUI() {
-    moneyEl.textContent = money;
-    lifeEl.textContent = life;
-    waveEl.textContent = wave;
+    document.getElementById("money").textContent = money;
+    document.getElementById("life").textContent = life;
+    document.getElementById("wave").textContent = wave;
 }
 
-// Game Over
+// 🏆 RANKING
+function saveScore() {
+    let ranking = JSON.parse(localStorage.getItem("ranking")) || [];
+
+    ranking.push(score);
+    ranking.sort((a, b) => b - a);
+    ranking = ranking.slice(0, 5);
+
+    localStorage.setItem("ranking", JSON.stringify(ranking));
+}
+
+function showRanking() {
+    let ranking = JSON.parse(localStorage.getItem("ranking")) || [];
+    let list = document.getElementById("ranking");
+    list.innerHTML = "";
+
+    ranking.forEach(s => {
+        let li = document.createElement("li");
+        li.textContent = s;
+        list.appendChild(li);
+    });
+}
+
+// GAME OVER
 function checkGameOver() {
     if (life <= 0) {
-        alert("💀 Game Over!");
-        location.reload();
+        gameRunning = false;
+
+        saveScore();
+
+        document.getElementById("score").textContent = score;
+        showRanking();
+
+        gameOverScreen.style.display = "flex";
+        playSound(100);
     }
 }
 
-// Loop
-function gameLoop() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+// LOOP
+function loop() {
+    if (gameRunning) {
+        spawnTimer++;
 
-    drawPath();
+        if (spawnTimer > 60) {
 
-    handleWave(); // ← fica só aqui
+            if (kills >= nextBoss && enemies.length === 0) {
+                spawnBoss();
+                nextBoss += 20;
+            } else {
+                spawnEnemy();
+            }
 
-    updateEnemies();
-    updateTowers();
-    updateBullets();
+            spawnTimer = 0;
+        }
 
-    drawEnemies();
-    drawTowers();
-    drawBullets();
-    drawExplosions();
+        updateEnemies();
+        updateTowers();
+        updateBullets();
+        updateUI();
+        checkGameOver();
+    }
 
-    updateUI();
-    checkGameOver();
-
-    requestAnimationFrame(gameLoop);
+    draw();
+    requestAnimationFrame(loop);
 }
 
-// spawn
-
-
-gameLoop();
+loop();

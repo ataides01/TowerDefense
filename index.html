@@ -9,14 +9,34 @@
 
 <body>
 
-    <h1>🏹 Tower Defense PRO</h1>
+    <div id="menu">
+        <h1>🏹 Tower Defense</h1>
+        <button onclick="startGame()">Jogar</button>
+    </div>
+
+    <div id="hud">
+        <div>💰 <span id="money">200</span></div>
+        <div>❤️ <span id="life">10</span></div>
+        <div>👾 <span id="wave">1</span></div>
+
+        <div id="towers">
+            <button onclick="selectTower('normal')">🔵</button>
+            <button onclick="selectTower('sniper')">🟣</button>
+            <button onclick="selectTower('ice')">❄️</button>
+            <button onclick="selectTower('splash')">💣</button>
+        </div>
+    </div>
 
     <canvas id="gameCanvas" width="900" height="500"></canvas>
 
-    <div class="hud">
-        💰 <span id="money">100</span>
-        ❤️ <span id="life">10</span>
-        👾 Wave: <span id="wave">1</span>
+    <div id="gameOver">
+        <h1>💀 Game Over</h1>
+        <p>Pontuação: <span id="score"></span></p>
+
+        <h3>🏆 Ranking</h3>
+        <ul id="ranking"></ul>
+
+        <button onclick="restartGame()">Reiniciar</button>
     </div>
 
     <script src="script.js"></script>
