@@ -1,12 +1,17 @@
 body {
-    text-align: center;
-    background: #111;
+    background: #0d0d0d;
     color: white;
+    text-align: center;
     font-family: Arial;
 }
 
 canvas {
-    background: #222;
-    border: 2px solid white;
+    background: #1a1a1a;
+    border: 2px solid #fff;
     margin-top: 10px;
+}
+
+.hud {
+    margin-top: 10px;
+    font-size: 18px;
 }
